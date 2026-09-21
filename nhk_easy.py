@@ -124,15 +124,34 @@ class NHKClient:
             allowed_methods=["GET"],
         )))
 
+    def authorize(self):
+        """Establish NHK's ordinary anonymous overseas visitor session."""
+        auth = self.session.get("https://news.web.nhk/tix/build_authorize", params={
+            "idp": "a-alaz", "profileType": "abroad", "redirect_uri": BASE_URL, "entity": "none",
+        }, timeout=30)
+        auth.raise_for_status()
+
+    def playback_token(self) -> str:
+        """Follow the public audio player's normal token exchange; never persist tokens."""
+        if not self.session.cookies.get("z_at"):
+            self.authorize()
+        visitor = self.session.cookies.get("z_at")
+        if not visitor:
+            raise ValueError("NHK did not establish an anonymous playback session")
+        response = self.session.get("https://mediatoken.web.nhk/v1/token",
+                                    headers={"Authorization": "Bearer " + visitor}, timeout=30)
+        response.raise_for_status()
+        token = response.json().get("token")
+        if not isinstance(token, str) or not token or len(token) > 8192:
+            raise ValueError("NHK playback token response changed")
+        return token
+
     def index(self) -> dict:
         response = self.session.get(urljoin(BASE_URL, "news-list.json"), timeout=30)
         if response.status_code == 401:
             # NHK's ordinary anonymous overseas-visitor flow. No NHK account,
             # fabricated Japanese address, stored cookie, or paid access required.
-            auth = self.session.get("https://news.web.nhk/tix/build_authorize", params={
-                "idp": "a-alaz", "profileType": "abroad", "redirect_uri": BASE_URL, "entity": "none",
-            }, timeout=30)
-            auth.raise_for_status()
+            self.authorize()
             response = self.session.get(urljoin(BASE_URL, "news-list.json"), timeout=30)
         response.raise_for_status()
         return parse_index(response.json())

@@ -68,9 +68,28 @@ def test_bad_audio_cannot_leave_partial_mp3(tmp_path):
     path = tmp_path / (row()['news_id'] + '.mp3')
     path.write_bytes(b'partial')
     with patch('build_site.subprocess.run', side_effect=subprocess.CalledProcessError(1, 'ffmpeg')):
-        with pytest.raises(subprocess.CalledProcessError):
+        with pytest.raises(RuntimeError, match='Audio conversion failed'):
             encode_audio(row(news_easy_voice_uri='abc.m4a'), tmp_path)
     assert not path.exists()
+
+
+def test_playback_uses_anonymous_session_token_only_for_official_token_endpoint():
+    client = NHKClient()
+    client.session.cookies.set('z_at', 'anonymous-visitor-token')
+    response = MagicMock()
+    response.json.return_value = {'token': 'temporary-playback-token'}
+    with patch.object(client.session, 'get', return_value=response) as get:
+        assert client.playback_token() == 'temporary-playback-token'
+        assert get.call_args.args[0] == 'https://mediatoken.web.nhk/v1/token'
+        assert get.call_args.kwargs['headers'] == {'Authorization': 'Bearer anonymous-visitor-token'}
+
+
+def test_failed_conversion_does_not_expose_playback_token(tmp_path):
+    with patch('build_site.subprocess.run', side_effect=subprocess.CalledProcessError(8, ['ffmpeg', 'secret-token'])):
+        with pytest.raises(RuntimeError) as failure:
+            encode_audio(row(news_easy_voice_uri='abc.m4a'), tmp_path, 'secret-token')
+    assert 'secret-token' not in str(failure.value)
+    assert failure.value.__suppress_context__
 
 
 def fake_audio(row, directory):

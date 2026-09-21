@@ -12,7 +12,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 import xml.etree.ElementTree as ET
 from zoneinfo import ZoneInfo
 
@@ -59,10 +59,12 @@ def audio_source(row: dict) -> str | None:
     return f"https://media.vd.st.nhk/news/easy_audio/{voice[:-4]}/index.m3u8"
 
 
-def encode_audio(row: dict, directory: Path) -> dict | None:
+def encode_audio(row: dict, directory: Path, playback_token: str = "") -> dict | None:
     source = audio_source(row)
     if source is None:
         return None
+    if playback_token:
+        source += "?" + urlencode({"hdnts": playback_token})
     name = f"{row['news_id']}.mp3"
     destination = directory / name
     directory.mkdir(parents=True, exist_ok=True)
@@ -79,7 +81,11 @@ def encode_audio(row: dict, directory: Path) -> dict | None:
         size = destination.stat().st_size
         if not 1 <= duration <= 1800 or not 1000 <= size <= 20 * 1024 * 1024:
             raise ValueError("Audio is empty or unexpectedly large")
-    except (subprocess.SubprocessError, ValueError, KeyError):
+    except subprocess.SubprocessError:
+        destination.unlink(missing_ok=True)
+        # Subprocess exceptions include the command; never log the temporary token.
+        raise RuntimeError(f"Audio conversion failed for {row['news_id']}") from None
+    except (ValueError, KeyError):
         destination.unlink(missing_ok=True)
         raise
     return {"path": f"audio/{name}", "bytes": size, "duration": round(duration)}
@@ -237,13 +243,16 @@ def make_artwork(output: Path):
     image.crop((90, 90, 350, 350)).resize((180, 180)).save(output / "touch-icon.png")
 
 
-def build_site(output: Path, base: str, now: datetime | None = None, client=None, audio_encoder=encode_audio):
+def build_site(output: Path, base: str, now: datetime | None = None, client=None, audio_encoder=None):
     if urlparse(base).scheme != "https" or not urlparse(base).netloc or urlparse(base).query or urlparse(base).fragment:
         raise ValueError("The site's base URL must be an absolute HTTPS URL without query or fragment")
     base = base.rstrip("/") + "/"
     now = now or datetime.now(JST)
     client = client or NHKClient()
     rows = latest_rows(client.index(), now)
+    if audio_encoder is None:
+        token = client.playback_token() if any(audio_source(row) for row in rows) else ""
+        audio_encoder = lambda row, directory: encode_audio(row, directory, token)
     # Require a clean output directory so expired stories/audio can never leak into a deployment.
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
