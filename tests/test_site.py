@@ -6,11 +6,12 @@ import xml.etree.ElementTree as ET
 
 from bs4 import BeautifulSoup
 import pytest
+import requests
 import yaml
 
 from build_site import (CONTENT, ITUNES, ROME, audio_source, build_site,
                         encode_audio, latest_rows, plain_text)
-from nhk_easy import JST
+from nhk_easy import JST, NHKClient
 from test_pipeline import article, row
 
 BASE = 'https://reader.github.io/japanese/'
@@ -37,6 +38,30 @@ def test_audio_source_uses_official_player_mapping_and_rejects_paths():
     assert audio_source({}) is None
     with pytest.raises(ValueError):
         audio_source({'news_easy_voice_uri': '../other.m4a'})
+
+
+def test_stale_image_uses_current_original_article_image():
+    client = NHKClient()
+    article_response = MagicMock(text='<div id="js-article-body"><p>' + '記事です。' * 20 + '</p></div>')
+    original_response = MagicMock(text='<meta property="og:image" content="https://imgu.web.nhk/replacement.jpg">')
+    missing = requests.HTTPError(response=MagicMock(status_code=404))
+    with patch.object(client.session, 'get', side_effect=[article_response, original_response]):
+        with patch.object(client, 'image', side_effect=[missing, b'new-image']) as images:
+            result = client.article(row(news_web_image_uri='https://news.web.nhk/old.jpg',
+                                        news_web_url='https://news.web.nhk/newsweb/na/article'))
+            assert result.image == b'new-image'
+            assert images.call_args.args[0] == 'https://imgu.web.nhk/replacement.jpg'
+
+
+def test_image_server_failure_is_not_treated_as_stale_url():
+    client = NHKClient()
+    response = MagicMock(text='<div id="js-article-body"><p>' + '記事です。' * 20 + '</p></div>')
+    with patch.object(client.session, 'get', return_value=response) as get:
+        with patch.object(client, 'image', side_effect=requests.HTTPError(response=MagicMock(status_code=503))):
+            with pytest.raises(requests.HTTPError):
+                client.article(row(news_web_image_uri='https://news.web.nhk/old.jpg',
+                                   news_web_url='https://news.web.nhk/newsweb/na/article'))
+            assert get.call_count == 1
 
 
 def test_bad_audio_cannot_leave_partial_mp3(tmp_path):

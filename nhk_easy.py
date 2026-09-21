@@ -171,7 +171,25 @@ class NHKClient:
         if not image_url:
             hero = soup.select_one(".article-main__figure img, .article-main__image img")
             image_url = hero.get("src") if hero else None
-        image = self.image(urljoin(url, image_url)) if image_url else None
+        image = None
+        if image_url:
+            try:
+                image = self.image(urljoin(url, image_url))
+            except requests.HTTPError as error:
+                # NHK sometimes replaces a photo on the original article without
+                # updating Easy's index. Use that article's current official image.
+                source_url = row.get("news_web_url", "")
+                if (error.response.status_code not in (404, 410)
+                        or urlparse(source_url).scheme != "https"
+                        or urlparse(source_url).hostname != "news.web.nhk"):
+                    raise
+                source = self.session.get(source_url, timeout=30)
+                source.raise_for_status()
+                source.encoding = "utf-8"
+                meta = BeautifulSoup(source.text, "html.parser").find("meta", property="og:image")
+                if not meta or not meta.get("content"):
+                    raise ValueError(f"Replacement image missing for {news_id}") from error
+                image = self.image(urljoin(source_url, meta["content"]))
         if image is None:
             LOG.warning("NHK supplies no lead image for %s", news_id)
         return Article(
