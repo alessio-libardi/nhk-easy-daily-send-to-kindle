@@ -1,4 +1,44 @@
-# NHK Easy → Kindle
+# まいにち — NHK Easy reading, listening & Kindle
+
+## Website and podcast
+
+The **Daily reading room & podcast** workflow publishes a mobile-friendly GitHub Pages website, a full-text reading RSS feed, and an audio podcast. It starts every day at **06:00 Europe/Rome**, automatically following Italian daylight-saving time. GitHub schedules and builds can run late; publication is not guaranteed exactly at 06:00.
+
+Only the **latest available Japanese publication day**, with at most **five stories**, is hosted. A new edition replaces all older pages, images and recordings. There is no archive. At 06:00 in Italy, NHK generally has not published that Japanese evening's stories yet, so the website usually shows the preceding publication day. Weekends and holidays keep the latest edition. Source publication dates remain visible; old articles are never relabeled as today's.
+
+Each story has its full text, image, furigana toggle, text-size controls, an audio player with playback speed, and a link to NHK. Read/unread marks and reading preferences are stored only in that browser. They do not sync across devices. JavaScript is optional for reading and standard audio playback.
+
+- **Website:** `https://alessio-libardi.github.io/nhk-easy-daily-send-to-kindle/`
+- **Reading RSS:** append `feed.xml` to the website URL.
+- **Podcast RSS:** append `podcast.xml` to the website URL.
+- **Apple Podcasts:** Library → more (•••) → Follow a Show by URL → paste the podcast feed URL. The site's **Listen** page includes copy buttons and instructions. No submission to Apple's public directory is needed.
+
+The podcast uses NHK's article recordings, converted from its public HLS player stream to mono 64 kbps MP3. Each article is one episode. Episode GUIDs use the original NHK URL and never change on a rebuild or repository rename. Enclosures have unique URLs, MIME types and exact file sizes. If NHK has no recording, the article is available to read but is omitted from the podcast. Unexpected download or conversion failures stop deployment and preserve the previous complete site.
+
+**Daily replacement also removes the previous edition's hosted MP3s.** Download episodes before they leave the feed if you want to keep them. Removing them here does not delete files already downloaded to your phone. Apple Podcasts controls automatic downloads and deletion of played episodes separately.
+
+### Pages setup and maintenance
+
+1. In **Settings → Pages → Build and deployment**, set **Source** to **GitHub Actions**.
+2. Run **Actions → Daily reading room & podcast → Run workflow**. Source-code changes also trigger deployment; pull requests run offline tests only.
+3. Open the deployment URL shown in the workflow's `github-pages` environment.
+
+No new credentials or secrets are required. The Pages workflow has no access to Gmail/Kindle secrets and does not send email. It builds into a fresh `_site` directory, so older editions cannot accumulate in the published site or Git history. The temporary Pages upload expires after one day; that does **not** expire the live website.
+
+When renaming the repository, rerun the Pages workflow. It gets the current base URL from GitHub Pages automatically; page links and feed URLs are regenerated. Subscribers must update the feed address if the site's URL changes. Existing episode GUIDs remain stable.
+
+To build locally, install Python dependencies as below and install `ffmpeg` (which includes `ffprobe`), then run:
+
+```bash
+python build_site.py --base-url https://YOUR-USERNAME.github.io/YOUR-REPOSITORY/
+python -m http.server 8000 --directory _site
+```
+
+Use an empty output directory for every build (`--output` can select a different directory). The generator deliberately refuses to reuse one containing an older edition.
+
+The website is a public, independent study project, not an official NHK site. Text, images and audio belong to NHK and their respective rights holders.
+
+## Kindle delivery
 
 Every day, GitHub Actions fetches up to **five articles published that day in Japan** from NHK NEWS WEB EASY, creates one Japanese EPUB, saves it as a downloadable Actions artifact, and sends it to your Kindle through Gmail.
 

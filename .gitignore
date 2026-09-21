@@ -2,6 +2,7 @@
 __pycache__/
 .pytest_cache/
 dist/
+_site/
 *.epub
 .env
 .env.*
