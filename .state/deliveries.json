@@ -439,5 +439,15 @@
       "20261117de77056"
     ],
     "epub_sha256": "f4afcd2dabe5cace3f94a67e74ce388f7971f1011c54c14babedba6d9223c264"
+  },
+  "2026-11-18": {
+    "accepted_by_gmail_at": "2026-11-18T13:48:38.315594+00:00",
+    "article_ids": [
+      "20261118de77670",
+      "20261118de77667",
+      "20261118de77665",
+      "20261118de77669"
+    ],
+    "epub_sha256": "298788540ff5802dca939be20e20ef751f0c7bde2f21e3dacbd0a332af9afb4b"
   }
 }
